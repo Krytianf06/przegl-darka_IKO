@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="pl">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>Obrazy blokami + cache</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 700px;
+      margin: 20px auto;
+      padding: 10px;
+      background-color: #f9f9f9;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    #controls {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    button {
+      padding: 10px 20px;
+      margin: 0 15px;
+      font-size: 16px;
+      cursor: pointer;
+    }
+
+    #labelContainer {
+      display: block;
+      text-align: center;
+      margin-top: 10px;
+      font-weight: bold;
+      font-size: 18px;
+    }
+
+    #dynamicImage {
+      display: block;
+      margin: 20px auto;
+      max-width: 100%;
+      height: auto;
+      border: 2px solid #333;
+      background-color: #fff;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h2>Nawigacja obrazami blokami</h2>
+
+  <div id="controls">
+    <button id="prevBtn">Lewo</button>
+    <button id="nextBtn">Prawo</button>
+  </div>
+
+  <div id="labelContainer">Brak danych</div>
+  <img id="dynamicImage" src="" alt="Obraz" />
+
+  <script>
+    const klucze = [];
+    let currentBlockIndex = 0;
+    let currentIndex = 0;
+    const imagesCache = [];
+    const blockSize = 10;
+
+    // Wczytanie listy kluczy z pliku JSON
+    fetch('./zmodyfikowany_plik.json')
+      .then(res => res.json())
+      .then(data => {
+        Object.keys(data).forEach(k => klucze.push(k));
+        if (klucze.length > 0) {
+          loadBlock(currentBlockIndex);
+        }
+      })
+      .catch(err => console.error('Błąd wczytania kluczy:', err));
+
+    async function loadBlock(blockIdx) {
+      imagesCache.length = 0;
+      const start = blockIdx * blockSize;
+      const end = Math.min(start + blockSize, klucze.length);
+      const promises = [];
+
+      for (let i = start; i < end; i++) {
+        promises.push(
+          fetch('http://localhost:3000/get-manifest', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ klucz: klucze[i] }),
+          }).then(res => res.json())
+            .then(data => ({
+              label: data.label || 'Brak etykiety',
+              imageBase64: data.imageBase64,
+              imageType: data.imageType
+            }))
+        );
+      }
+
+      const results = await Promise.all(promises);
+      results.forEach(r => imagesCache.push(r));
+      currentIndex = 0;
+      if (imagesCache.length > 0) {
+        displayImage(currentIndex);
+      }
+    }
+
+    function displayImage(indexInBlock) {
+      const data = imagesCache[indexInBlock];
+      if (data) {
+        document.getElementById('labelContainer').innerText = data.label;
+        document.getElementById('dynamicImage').src = `data:${data.imageType};base64,${data.imageBase64}`;
+      }
+    }
+
+    document.getElementById('prevBtn').addEventListener('click', () => {
+      if (currentIndex > 0) {
+        currentIndex--;
+        if (currentIndex === 0 && currentBlockIndex > 0) {
+          currentBlockIndex--;
+          loadBlock(currentBlockIndex).then(() => {
+            currentIndex = imagesCache.length - 1;
+            displayImage(currentIndex);
+          });
+        } else {
+          displayImage(currentIndex);
+        }
+      }
+    });
+
+    document.getElementById('nextBtn').addEventListener('click', () => {
+      if (currentIndex < imagesCache.length - 1) {
+        currentIndex++;
+        if (currentIndex >= imagesCache.length && (currentBlockIndex + 1) * blockSize < klucze.length) {
+          currentBlockIndex++;
+          loadBlock(currentBlockIndex).then(() => {
+            currentIndex = 0;
+            displayImage(currentIndex);
+          });
+        } else {
+          displayImage(currentIndex);
+        }
+      }
+    });
+  </script>
+
+</body>
+
+</html>
+
+
+
+
+
+
+
+
+
+
+<!-- <h2>Nawigacja obrazami</h2>
+  <div class="button2">
+    <button id="prevBtn">Lewo</button>
+  <button id="nextBtn">Prawo</button>
+
+  </div>
+  
+  <div style="margin-top:10px;"><strong>Etykieta:</strong> <span id="labelContainer">Brak danych</span></div>
+  <div style="margin-top:10px;">
+    <img id="dynamicImage" src="" alt="Obraz" style="max-width: 100%; height: auto; border: 1px solid #ccc;" />
+  </div>
+
+
+
+  <script>
+    // Lista kluczy, którą załadujesz z pliku JSON
+    const klucze = [];
+    let currentIndex = 0;
+
+    // Wczytanie kluczy z pliku JSON (np. serwera)
+    fetch('./zmodyfikowany_plik.json')
+      .then(res => res.json())
+      .then(data => {
+        Object.keys(data).forEach(k => klucze.push(k));
+        if (klucze.length > 0) {
+          loadImage(currentIndex);
+        }
+      })
+      .catch(err => console.error('Błąd wczytania kluczy:', err));
+
+    // Funkcja do pobrania i wyświetlenia obrazu + etykiety
+    function loadImage(index) {
+      const klucz = klucze[index];
+      fetch("http://localhost:3000/get-manifest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ klucz }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          // Wyświetlamy etykietę
+          document.getElementById("labelContainer").innerText = data.label || "Brak etykiety";
+          // Wyświetlamy obraz jako data URL
+          document.getElementById("dynamicImage").src = `data:${data.imageType};base64,${data.imageBase64}`;
+        })
+        .catch(err => {
+          console.error("Błąd wczytania:", err);
+        });
+    }
+
+    // Obsługa przycisków
+    document.getElementById("prevBtn").addEventListener("click", () => {
+      if (currentIndex > 0) {
+        currentIndex--;
+        loadImage(currentIndex);
+      }
+    });
+
+    document.getElementById("nextBtn").addEventListener("click", () => {
+      if (currentIndex < klucze.length - 1) {
+        currentIndex++;
+        loadImage(currentIndex);
+      }
+    });
+  </script> -->
